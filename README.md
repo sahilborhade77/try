@@ -163,9 +163,7 @@ Planned features marked in code (see TODO comments):
 - Consider lowering the DTW threshold for stricter matching
 - Record multiple examples of each sign
 
-## License
 
-[Specify your license here, e.g., MIT, Apache 2.0, etc.]
 
 ---
 
@@ -219,3 +217,4 @@ For questions or suggestions, please open an issue in the repository.
 ---
 
 **Status:** Production-ready | **Version:** 2.0 | **Last Updated:** January 2026
+
