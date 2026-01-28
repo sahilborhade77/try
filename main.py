@@ -11,17 +11,15 @@ from webcam_manager import WebcamManager
 
 
 # ============================================================================
-# TODO: FUTURE ENHANCEMENTS
+# SIGN LANGUAGE RECOGNITION SYSTEM v3.0
 # ============================================================================
-# 1. Static Alphabet Recognition
-#    - Add a separate ML classifier for A-Z sign alphabet recognition
-#    - Use with a dedicated model (e.g., CNN on hand landmarks)
-#    - Can be triggered by a special key combination (e.g., 'a' for alphabet mode)
-#
-# 2. Speech-to-Sign
-#    - Add speech recognition input (using speech_recognition library)
-#    - Convert spoken words to corresponding signs
-#    - Display animated sign sequences
+# Key Improvements:
+# 1. Distance-invariant landmarks (normalized by wrist + hand size)
+# 2. Gesture-based recording (open palm → record, fist → stop)
+# 3. Stability-based prediction (10+ frames confirmation)
+# 4. Sentence buffer (accumulate words instead of single word)
+# 5. Comprehensive visual feedback (confidence, status, frame count)
+# 6. Idle state handling (detect absence of hands)
 # ============================================================================
 
 
@@ -47,10 +45,10 @@ def get_sign_name_input():
 
 
 def main():
-    """Main application loop."""
+    """Main application loop with gesture-based control."""
     
     print("\n" + "="*60)
-    print("🤟 SIGN LANGUAGE RECOGNITION SYSTEM v2.0")
+    print("🤟 SIGN LANGUAGE RECOGNITION SYSTEM v3.0")
     print("="*60)
     print("\nInitializing system...")
     
@@ -63,19 +61,25 @@ def main():
     webcam_manager = WebcamManager()
     voice_output = VoiceOutput()
     
-    # Current mode and sign name
+    # Current mode and state
     mode = "recognize"  # Start in recognize mode
     current_sign_name = None
-    last_spoken_sign = None  # Track which sign we just spoke to avoid repetition
+    
+    # ===== NEW: Sentence buffer for accumulating words =====
+    sentence_buffer = []  # List of recognized signs
+    last_spoken_sign = None  # Track which sign we last spoke
     
     print("\n" + "="*60)
-    print("KEYBOARD CONTROLS")
+    print("GESTURE-BASED CONTROLS (NO KEYBOARD NEEDED!)")
     print("="*60)
-    print("  'r' = Start/Stop Recording")
-    print("  'm' = Toggle Mode (RECORD ↔ RECOGNIZE)")
-    print("  'n' = Record NEW Sign")
-    print("  'q' = Quit")
+    print("  OPEN PALM  → Start Recording")
+    print("  FIST       → Stop Recording & Recognize")
+    print("  PRESS 'm'  → Toggle Record/Recognize Mode")
+    print("  PRESS 'n'  → Record New Sign (Record Mode)")
+    print("  PRESS 'c'  → Clear Sentence Buffer")
+    print("  PRESS 'q'  → Quit")
     print("="*60)
+    print("\n✓ System Ready - Begin signing!\n")
     
     # Turn on the webcam
     cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
@@ -106,42 +110,51 @@ def main():
                 # Make detections
                 image, results = mediapipe_detection(frame, holistic)
 
-                # Process results
-                sign_detected, is_recording = sign_recorder.process_results(results)
-                sequence_length = len(sign_recorder.recorded_results)
+                # ===== NEW: Process results with new return format =====
+                sign_detected, is_recording, status = sign_recorder.process_results(results)
+                sequence_length = status['frame_count']
+                hand_visible = status['hand_visible']
 
-                # Update the frame (draw landmarks & display result)
+                # Update the frame with enhanced visual feedback
                 webcam_manager.update(
                     frame=image,
                     results=results,
                     sign_detected=sign_detected,
+                    sentence_buffer=sentence_buffer,  # NEW: Show full sentence
                     is_recording=is_recording,
                     sequence_length=sequence_length,
+                    hand_visible=hand_visible,  # NEW: Show idle status
                     current_mode=mode,
                     current_sign_name=current_sign_name,
-                    dtw_distance=sign_recorder.last_dtw_distance
+                    dtw_distance=sign_recorder.last_dtw_distance,
+                    confidence=status['confidence']  # NEW: Show confidence
                 )
+                
+                # ===== NEW: Handle recognized signs (add to sentence buffer) =====
+                if sign_detected and sign_detected not in ["Unknown Sign", "No reference signs", ""]:
+                    if sign_detected != last_spoken_sign:
+                        # Add to sentence buffer
+                        sentence_buffer.append(sign_detected)
+                        
+                        # Speak the word
+                        voice_output.speak_sign(sign_detected)
+                        last_spoken_sign = sign_detected
+                        
+                        print(f"✓ Sign added to sentence: {' '.join(sentence_buffer)}")
+                
+                # Handle "Unknown Sign" feedback
+                if sign_detected == "Unknown Sign":
+                    if last_spoken_sign != "Unknown Sign":
+                        voice_output.speak_unknown()
+                        last_spoken_sign = "Unknown Sign"
 
                 # Handle keyboard input
                 pressedKey = cv2.waitKey(1) & 0xFF
                 
-                if pressedKey == ord("r"):
-                    # Toggle recording
-                    if is_recording or sign_recorder.is_saving:
-                        sign_recorder.stop_recording()
-                        print("⏹ Recording stopped")
-                    else:
-                        if mode == "record":
-                            if current_sign_name:
-                                sign_recorder.record(current_sign_name)
-                                print(f"🎥 Recording '{current_sign_name}'...")
-                            else:
-                                print("⚠ No sign name set. Press 'n' to record a new sign.")
-                        else:
-                            sign_recorder.record()
-                            print("🎥 Recording gesture for recognition...")
-                        
-                elif pressedKey == ord("m"):
+                # ===== REMOVED: 'r' key recording (now gesture-based) =====
+                # Gesture detection is automatic via open palm/fist
+                
+                if pressedKey == ord("m"):
                     # Toggle mode
                     if mode == "record":
                         mode = "recognize"
@@ -153,6 +166,12 @@ def main():
                     voice_output.reset()
                     last_spoken_sign = None  # Reset voice tracking when switching modes
                     print(f"\n✓ Switched to '{mode.upper()}' mode\n")
+                
+                elif pressedKey == ord("c"):
+                    # ===== NEW: Clear sentence buffer =====
+                    sentence_buffer = []
+                    last_spoken_sign = None
+                    print("\n🗑️  Sentence buffer cleared\n")
                     
                 elif pressedKey == ord("n"):
                     # Record new sign
@@ -163,27 +182,13 @@ def main():
                         if new_sign_name:
                             current_sign_name = new_sign_name
                             sign_recorder.record(current_sign_name)
-                            print(f"🎥 Recording '{current_sign_name}'...")
+                            print(f"🎥 Recording '{current_sign_name}'...\n")
                     
                 elif pressedKey == ord("q"):
                     # Quit cleanly
                     print("\n🛑 Closing application...")
                     sign_recorder.stop_recording()
                     break
-                
-                # Speak recognized sign (only when a NEW sign is recognized)
-                if mode == "recognize" and sign_detected and not is_recording:
-                    if sign_detected != "No reference signs":
-                        if sign_detected == "Unknown Sign":
-                            # Speak "I don't understand" for unrecognized signs
-                            if last_spoken_sign != "Unknown Sign":
-                                voice_output.speak_unknown()
-                                last_spoken_sign = "Unknown Sign"
-                        else:
-                            # Only speak if it's a different sign than the last one we spoke
-                            if sign_detected != last_spoken_sign:
-                                voice_output.speak_sign(sign_detected)
-                                last_spoken_sign = sign_detected
         
         except KeyboardInterrupt:
             print("\n⚠ Interrupted by user")

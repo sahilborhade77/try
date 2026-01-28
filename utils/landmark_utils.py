@@ -14,9 +14,46 @@ def landmark_to_array(mp_landmark_list):
     return np.nan_to_num(keypoints)
 
 
+def normalize_hand_landmarks(landmarks):
+    """
+    Normalize hand landmarks for distance-invariant recognition.
+    
+    Uses the wrist (landmark 0) as origin and scales by hand size.
+    This makes the model robust to camera distance variations.
+    
+    :param landmarks: Array of shape (21, 3) or list of 63 values
+    :return: Normalized landmarks as array of shape (21, 3)
+    """
+    landmarks = np.array(landmarks).reshape((21, 3))
+    
+    # Check if any landmarks are detected (all zeros = no hand)
+    if np.sum(landmarks) == 0:
+        return landmarks
+    
+    # Use wrist (landmark 0) as origin
+    wrist = landmarks[0].copy()
+    landmarks = landmarks - wrist
+    
+    # Calculate hand size (max distance between any two landmarks)
+    # This is robust and helps scale invariance
+    max_distance = 0
+    for i in range(len(landmarks)):
+        for j in range(i + 1, len(landmarks)):
+            dist = np.linalg.norm(landmarks[i] - landmarks[j])
+            max_distance = max(max_distance, dist)
+    
+    # Avoid division by zero
+    if max_distance > 0:
+        landmarks = landmarks / max_distance
+    
+    return landmarks
+
+
 def extract_landmarks(results):
     """Extract the results of both hands and convert them to a np array of size
     if a hand doesn't appear, return an array of zeros
+    
+    Uses normalized landmarks for distance-invariant recognition.
 
     :param results: mediapipe object that contains the 3D position of all keypoints
     :return: Two np arrays of size (1, 21 * 3) = (1, nb_keypoints * nb_coordinates) corresponding to both hands
@@ -25,13 +62,18 @@ def extract_landmarks(results):
 
     left_hand = np.zeros(63).tolist()
     if results.left_hand_landmarks:
-        left_hand = landmark_to_array(results.left_hand_landmarks).reshape(63).tolist()
+        # Normalize left hand landmarks for distance invariance
+        lh_landmarks = landmark_to_array(results.left_hand_landmarks)
+        lh_normalized = normalize_hand_landmarks(lh_landmarks)
+        left_hand = lh_normalized.reshape(63).tolist()
 
     right_hand = np.zeros(63).tolist()
     if results.right_hand_landmarks:
-        right_hand = (
-            landmark_to_array(results.right_hand_landmarks).reshape(63).tolist()
-        )
+        # Normalize right hand landmarks for distance invariance
+        rh_landmarks = landmark_to_array(results.right_hand_landmarks)
+        rh_normalized = normalize_hand_landmarks(rh_landmarks)
+        right_hand = rh_normalized.reshape(63).tolist()
+    
     return pose, left_hand, right_hand
 
 
