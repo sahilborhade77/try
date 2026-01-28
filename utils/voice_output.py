@@ -25,16 +25,14 @@ class VoiceOutput:
     
     def speak_sign(self, sign_name):
         """
-        Speak the sign name aloud (only if it's different from last spoken).
+        Speak the sign name aloud.
         Runs in a separate thread to avoid blocking the main loop.
         
         :param sign_name: Name of the sign to speak
         """
-        # Only speak if it's a new sign (avoid repetition)
-        if sign_name == self.last_spoken or sign_name in ["Unknown Sign", "No reference signs"]:
+        # Don't speak unknown/invalid signs
+        if sign_name in ["Unknown Sign", "No reference signs"]:
             return
-        
-        self.last_spoken = sign_name
         
         # Run speech in a background thread to avoid blocking
         thread = threading.Thread(target=self._speak_thread, args=(sign_name,))
@@ -42,6 +40,20 @@ class VoiceOutput:
         thread.start()
         
         print(f"🔊 Speaking: {sign_name}")
+    
+    def speak_unknown(self):
+        """
+        Speak a message when a sign is not recognized.
+        Runs in a separate thread to avoid blocking the main loop.
+        """
+        message = "I don't understand"
+        
+        # Run speech in a background thread to avoid blocking
+        thread = threading.Thread(target=self._speak_thread, args=(message,))
+        thread.daemon = True
+        thread.start()
+        
+        print(f"🔊 Speaking: {message}")
     
     def _speak_thread(self, text):
         """Internal method to speak text in a thread."""

@@ -66,6 +66,7 @@ def main():
     # Current mode and sign name
     mode = "recognize"  # Start in recognize mode
     current_sign_name = None
+    last_spoken_sign = None  # Track which sign we just spoke to avoid repetition
     
     print("\n" + "="*60)
     print("KEYBOARD CONTROLS")
@@ -150,6 +151,7 @@ def main():
                     
                     sign_recorder.mode = mode
                     voice_output.reset()
+                    last_spoken_sign = None  # Reset voice tracking when switching modes
                     print(f"\n✓ Switched to '{mode.upper()}' mode\n")
                     
                 elif pressedKey == ord("n"):
@@ -169,10 +171,19 @@ def main():
                     sign_recorder.stop_recording()
                     break
                 
-                # Speak recognized sign (only in recognize mode and when sign changes)
+                # Speak recognized sign (only when a NEW sign is recognized)
                 if mode == "recognize" and sign_detected and not is_recording:
-                    if sign_detected != "Unknown Sign" and sign_detected != "No reference signs":
-                        voice_output.speak_sign(sign_detected)
+                    if sign_detected != "No reference signs":
+                        if sign_detected == "Unknown Sign":
+                            # Speak "I don't understand" for unrecognized signs
+                            if last_spoken_sign != "Unknown Sign":
+                                voice_output.speak_unknown()
+                                last_spoken_sign = "Unknown Sign"
+                        else:
+                            # Only speak if it's a different sign than the last one we spoke
+                            if sign_detected != last_spoken_sign:
+                                voice_output.speak_sign(sign_detected)
+                                last_spoken_sign = sign_detected
         
         except KeyboardInterrupt:
             print("\n⚠ Interrupted by user")
