@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import mediapipe as mp
+from typing import Optional, List
 
 
 WHITE_COLOR = (245, 242, 226)
@@ -21,10 +22,10 @@ class WebcamManager(object):
         self.sign_detected = ""
 
     def update(
-        self, frame: np.ndarray, results, sign_detected: str, sentence_buffer: list = None,
+        self, frame: np.ndarray, results, sign_detected: str, sentence_buffer: Optional[List[str]] = None,
         is_recording: bool = False, sequence_length: int = 0, hand_visible: bool = False,
-        current_mode: str = "recognize", current_sign_name: str = None,
-        dtw_distance: float = None, confidence: float = 0.0
+        current_mode: str = "recognize", current_sign_name: Optional[str] = None,
+        dtw_distance: Optional[float] = None, confidence: float = 0.0
     ):
         """
         Update the webcam display with landmarks, text, and comprehensive status information.
@@ -207,11 +208,58 @@ class WebcamManager(object):
         
         cv2.imshow("OpenCV Feed", frame)
 
+
+    def draw_text(
+        self,
+        frame,
+        font=cv2.FONT_HERSHEY_COMPLEX,
+        font_size=1.2,
+        font_thickness=2,
+        offset=int(HEIGHT * 0.02),
+    ):
+        
+        """
+        Draw single detected sign with background when no sentence buffer exists.
+        """
+        if not self.sign_detected:
+            return frame
+
+        window_w = int(HEIGHT * len(frame[0]) / len(frame))
+
+        (text_w, text_h), _ = cv2.getTextSize(
+            self.sign_detected, font, font_size, font_thickness
+        )
+
+        text_x = int((window_w - text_w) / 2)
+        text_y = HEIGHT - text_h - offset
+
+        # Background
+        cv2.rectangle(
+            frame,
+            (0, text_y - offset),
+            (window_w, HEIGHT),
+            (80, 80, 80),
+            -1,
+        )
+
+        # Text
+        cv2.putText(
+            frame,
+            self.sign_detected,
+            (text_x, text_y + text_h),
+            font,
+            font_size,
+            (255, 255, 255),
+            font_thickness,
+        )
+
+        return frame
+
     def draw_sentence_buffer(self, frame, sentence_text, font=cv2.FONT_HERSHEY_COMPLEX,
                            font_size=1.2, font_thickness=2, offset=int(HEIGHT * 0.02)):
         """
         ===== NEW: Draw sentence buffer with nice background
-        
+
         :param frame: The frame to draw on
         :param sentence_text: The sentence to display
         :param font: Font type
@@ -221,43 +269,24 @@ class WebcamManager(object):
         :return: Updated frame
         """
         window_w = int(HEIGHT * len(frame[0]) / len(frame))
-        
+
         (text_w, text_h), _ = cv2.getTextSize(
             sentence_text, font, font_size, font_thickness
         )
-        
+
         text_x, text_y = int((window_w - text_w) / 2), HEIGHT - text_h - offset
-        
+
         # Draw background rectangle
         cv2.rectangle(frame, (0, text_y - offset), (window_w, HEIGHT), (100, 150, 100), -1)
-        
+
         # Draw text
         cv2.putText(
             frame,
             sentence_text,
-            (text_x, text_y + text_h + font_size - 1),
+            (text_x, int(text_y + text_h + font_size - 1)),
             font,
             font_size,
             (255, 255, 255),  # White text
-            font_thickness,
-        )
-        return frame
-
-
-        (text_w, text_h), _ = cv2.getTextSize(
-            self.sign_detected, font, font_size, font_thickness
-        )
-
-        text_x, text_y = int((window_w - text_w) / 2), HEIGHT - text_h - offset
-
-        cv2.rectangle(frame, (0, text_y - offset), (window_w, HEIGHT), bg_color, -1)
-        cv2.putText(
-            frame,
-            self.sign_detected,
-            (text_x, text_y + text_h + font_size - 1),
-            font,
-            font_size,
-            (118, 62, 37),
             font_thickness,
         )
         return frame
