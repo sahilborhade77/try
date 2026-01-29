@@ -1,3 +1,7 @@
+git status
+git add .
+git commit -m "Fix Streamlit Cloud deployment issues and refactor app"
+git push origin main
 import streamlit as st
 import numpy as np
 from PIL import Image
