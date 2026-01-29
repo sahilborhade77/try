@@ -57,7 +57,8 @@ class WebcamManager(object):
         h, w = pil_image.size[::-1]  # PIL size is (w, h)
         aspect_ratio = w / h
         new_w = int(HEIGHT * aspect_ratio)
-        pil_image = pil_image.resize((new_w, HEIGHT), Image.ANTIALIAS)
+        pil_image = pil_image.resize((new_w, HEIGHT), Image.Resampling.LANCZOS)
+
 
         # Flip the image horizontally for mirror effect
         pil_image = pil_image.transpose(Image.FLIP_LEFT_RIGHT)
