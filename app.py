@@ -1,8 +1,7 @@
 import streamlit as st
-import cv2
-import mediapipe as mp
 import numpy as np
 from PIL import Image
+import mediapipe as mp
 
 from utils.mediapipe_utils import mediapipe_detection
 from utils.sign_storage import get_available_signs
@@ -74,7 +73,8 @@ def main():
     if camera_image is not None:
         # Convert to numpy array
         image = np.array(Image.open(camera_image))
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        # PIL is RGB, keep as RGB for MediaPipe
+        image_rgb = image
 
         # Process with MediaPipe
         with mp.solutions.holistic.Holistic(
@@ -83,7 +83,7 @@ def main():
             model_complexity=1  # CPU optimized
         ) as holistic:
 
-            processed_image, results = mediapipe_detection(image, holistic)
+            processed_image, results = mediapipe_detection(image_rgb, holistic)
 
             # Handle recording or recognition
             if st.session_state.is_recording:
@@ -114,11 +114,11 @@ def main():
                 is_recording=st.session_state.is_recording,
                 sequence_length=len(st.session_state.recorded_frames),
                 current_mode="recognize",
-                current_sign_name=None,
+                current_sign_name="",
                 dtw_distance=sign_recorder.last_dtw_distance
             )
 
-            st.image(display_image, channels="BGR", caption="Processed Frame")
+            st.image(display_image, caption="Processed Frame")
 
             # Show prediction
             if st.session_state.last_prediction:
