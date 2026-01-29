@@ -28,11 +28,12 @@ def main():
     st.markdown("Real-time sign language recognition using MediaPipe and DTW")
 
     # Load cached components
+    hand_landmarker = load_hand_landmarker()
     sign_recorder = load_sign_recorder()
     webcam_manager = load_webcam_mgr()
 
-    if sign_recorder is None:
-        st.error("Failed to initialize sign recognition. Please refresh the page.")
+    if hand_landmarker is None or sign_recorder is None:
+        st.error("Failed to initialize components. Please refresh the page.")
         return
 
     # Initialize session state
@@ -75,17 +76,10 @@ def main():
         # PIL is RGB, keep as RGB for MediaPipe
         image_rgb = image
 
-        # Process with MediaPipe
-        import mediapipe as mp
-        with mp.solutions.holistic.Holistic(
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-            model_complexity=1  # CPU optimized
-        ) as holistic:
+        # Process with MediaPipe HandLandmarker
+        processed_image, results = mediapipe_detection(image_rgb, hand_landmarker)
 
-            processed_image, results = mediapipe_detection(image_rgb, holistic)
-
-            # Handle recording or recognition
+        # Handle recording or recognition
             if st.session_state.is_recording:
                 # Add frame to recording buffer
                 st.session_state.recorded_frames.append(results)
