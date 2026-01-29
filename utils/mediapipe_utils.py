@@ -1,22 +1,21 @@
 import numpy as np
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
 
 def mediapipe_detection(image, model):
     """
-    Make holistic model prediction on image.
+    Make hand landmarker prediction on image using MediaPipe Tasks API.
 
-    :param image: Input image (numpy array)
-    :param model: MediaPipe holistic model
+    :param image: Input image (numpy array, RGB)
+    :param model: MediaPipe HandLandmarker model
     :return: Processed image and results
     """
-    # Convert to RGB if needed (assuming input is BGR from PIL conversion)
-    if image.shape[-1] == 3:
-        image_rgb = image[:, :, ::-1]  # BGR to RGB
-    else:
-        image_rgb = image
+    # Create vision.Image from numpy array (assuming RGB)
+    mp_image = vision.Image(image_format=vision.ImageFormat.SRGB, data=image)
 
-    image_rgb.flags.writeable = False  # Image is no longer writeable
-    results = model.process(image_rgb)  # Make prediction
-    image_rgb.flags.writeable = True  # Image is now writeable
+    # Perform detection
+    results = model.detect(mp_image)
 
-    # Return original image (BGR) and results
+    # Return original image and results
     return image, results
