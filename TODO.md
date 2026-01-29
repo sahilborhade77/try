@@ -1,8 +1,6 @@
-# TODO: Fix MediaPipe ImportError on Streamlit Cloud
+# TODO: Fix Streamlit Cloud Bug - Lazy MediaPipe Imports
 
-## Tasks
-- [x] Update utils/mediapipe_utils.py to use mediapipe.tasks.python.vision.HandLandmarker
-- [x] Update utils/landmark_utils.py to handle HandLandmarkerResult
-- [x] Update app.py to remove mediapipe.solutions import and use HandLandmarker
-- [ ] Verify no cv2 import (direct or indirect)
-- [ ] Test app loads without libGL error
+- [ ] Update utils/mediapipe_utils.py: Remove top-level MediaPipe imports and add lazy import in mediapipe_detection function
+- [ ] Update app.py: Add load_hand_landmarker function with lazy import and model creation
+- [ ] Run test_imports.py to confirm cv2 is not imported
+- [ ] Verify app starts without triggering cv2

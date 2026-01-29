@@ -9,7 +9,7 @@ from utils.sign_storage import save_sign_sequence, load_all_sign_sequences
 
 
 class SignRecorder(object):
-    def __init__(self, reference_signs: pd.DataFrame = None, seq_len=50, mode="recognize", dtw_threshold=2000):
+    def __init__(self, reference_signs: pd.DataFrame | None = None, seq_len=50, mode="recognize", dtw_threshold=2000):
         """
         Initialize SignRecorder.
         

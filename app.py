@@ -18,6 +18,8 @@ def load_sign_recorder():
         st.error(f"Failed to load sign recorder: {e}")
         return None
 
+
+
 @st.cache_resource
 def load_webcam_mgr():
     """Load the webcam manager once."""
@@ -28,11 +30,10 @@ def main():
     st.markdown("Real-time sign language recognition using MediaPipe and DTW")
 
     # Load cached components
-    hand_landmarker = load_hand_landmarker()
     sign_recorder = load_sign_recorder()
     webcam_manager = load_webcam_mgr()
 
-    if hand_landmarker is None or sign_recorder is None:
+    if sign_recorder is None:
         st.error("Failed to initialize components. Please refresh the page.")
         return
 
@@ -77,7 +78,7 @@ def main():
         image_rgb = image
 
         # Process with MediaPipe HandLandmarker
-        processed_image, results = mediapipe_detection(image_rgb, hand_landmarker)
+        processed_image, results = mediapipe_detection(image_rgb)
 
         # Handle recording or recognition
         if st.session_state.is_recording:
