@@ -1,5 +1,5 @@
 fastdtw==0.3.4
-mediapipe==0.10.5
+mediapipe==0.10.13
 numpy==1.24.3
 pandas==2.0.0
 Pillow==10.0.0

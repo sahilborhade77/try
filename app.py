@@ -80,25 +80,25 @@ def main():
         processed_image, results = mediapipe_detection(image_rgb, hand_landmarker)
 
         # Handle recording or recognition
-            if st.session_state.is_recording:
-                # Add frame to recording buffer
-                st.session_state.recorded_frames.append(results)
-                st.info(f"Frame recorded ({len(st.session_state.recorded_frames)}/50)")
+        if st.session_state.is_recording:
+            # Add frame to recording buffer
+            st.session_state.recorded_frames.append(results)
+            st.info(f"Frame recorded ({len(st.session_state.recorded_frames)}/50)")
 
-                # Auto-stop when enough frames collected
-                if len(st.session_state.recorded_frames) >= 50:
-                    sign_recorder.recorded_results = st.session_state.recorded_frames
-                    prediction = sign_recorder._compute_distances_and_predict()
-                    st.session_state.last_prediction = prediction
-                    st.session_state.is_recording = False
-                    st.session_state.recorded_frames = []
-                    st.success(f"Recording complete! Predicted: **{prediction}**")
-
-            else:
-                # Single frame recognition
-                sign_recorder.recorded_results = [results]
+            # Auto-stop when enough frames collected
+            if len(st.session_state.recorded_frames) >= 50:
+                sign_recorder.recorded_results = st.session_state.recorded_frames
                 prediction = sign_recorder._compute_distances_and_predict()
                 st.session_state.last_prediction = prediction
+                st.session_state.is_recording = False
+                st.session_state.recorded_frames = []
+                st.success(f"Recording complete! Predicted: **{prediction}**")
+
+        else:
+            # Single frame recognition
+            sign_recorder.recorded_results = [results]
+            prediction = sign_recorder._compute_distances_and_predict()
+            st.session_state.last_prediction = prediction
 
             # Display processed image with landmarks
             display_image = webcam_manager.draw_landmarks_on_image(processed_image.copy(), results)
