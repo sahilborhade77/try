@@ -293,30 +293,22 @@ class WebcamManager(object):
 
     @staticmethod
     def draw_landmarks(image, results):
-        mp_holistic = mp.solutions.holistic  # Holistic model
+        mp_hands = mp.solutions.hands
         mp_drawing = mp.solutions.drawing_utils  # Drawing utilities
 
-        # Draw left hand connections
-        mp_drawing.draw_landmarks(
-            image,
-            landmark_list=results.left_hand_landmarks,
-            connections=mp_holistic.HAND_CONNECTIONS,
-            landmark_drawing_spec=mp_drawing.DrawingSpec(
-                color=(232, 254, 255), thickness=1, circle_radius=1
-            ),
-            connection_drawing_spec=mp_drawing.DrawingSpec(
-                color=(255, 249, 161), thickness=2, circle_radius=2
-            ),
-        )
-        # Draw right hand connections
-        mp_drawing.draw_landmarks(
-            image,
-            landmark_list=results.right_hand_landmarks,
-            connections=mp_holistic.HAND_CONNECTIONS,
-            landmark_drawing_spec=mp_drawing.DrawingSpec(
-                color=(232, 254, 255), thickness=1, circle_radius=2
-            ),
-            connection_drawing_spec=mp_drawing.DrawingSpec(
-                color=(255, 249, 161), thickness=2, circle_radius=2
-            ),
-        )
+        hands = getattr(results, "multi_hand_landmarks", None)
+        if not hands:
+            return
+
+        for hand_landmarks in hands:
+            mp_drawing.draw_landmarks(
+                image,
+                landmark_list=hand_landmarks,
+                connections=mp_hands.HAND_CONNECTIONS,
+                landmark_drawing_spec=mp_drawing.DrawingSpec(
+                    color=(232, 254, 255), thickness=1, circle_radius=1
+                ),
+                connection_drawing_spec=mp_drawing.DrawingSpec(
+                    color=(255, 249, 161), thickness=2, circle_radius=2
+                ),
+            )

@@ -3,136 +3,166 @@ import os
 import numpy as np
 import pickle as pkl
 import mediapipe as mp
+from mediapipe.python.solutions import hands as mp_hands
+
 from utils.mediapipe_utils import mediapipe_detection
 
 
+# ============================================================================
+# LANDMARK UTILS (OPTIMIZED)
+# ============================================================================
+# Improvements:
+# 1. Wrist-based normalization (translation invariant)
+# 2. Palm-size scaling (scale invariant)
+# 3. Fast vectorized operations (no nested loops)
+# 4. Safe handling of missing hands
+# 5. Ready for ML / LSTM upgrade
+# ============================================================================
+
+
+# -------------------------------
+# Basic helpers
+# -------------------------------
+
 def landmark_to_array(mp_landmark_list):
-    """Return a np array of size (nb_keypoints x 3)"""
-    keypoints = []
-    for landmark in mp_landmark_list.landmark:
-        keypoints.append([landmark.x, landmark.y, landmark.z])
-    return np.nan_to_num(keypoints)
+    """
+    Convert MediaPipe landmark list to NumPy array (21, 3).
+    """
+    if mp_landmark_list is None:
+        return np.zeros((21, 3), dtype=np.float32)
+
+    return np.array(
+        [[lm.x, lm.y, lm.z] for lm in mp_landmark_list.landmark],
+        dtype=np.float32
+    )
 
 
-def normalize_hand_landmarks(landmarks):
+# -------------------------------
+# Normalization (CORE LOGIC)
+# -------------------------------
+
+def normalize_hand_landmarks(landmarks: np.ndarray) -> np.ndarray:
     """
-    Normalize hand landmarks for distance-invariant recognition.
-    
-    Uses the wrist (landmark 0) as origin and scales by hand size.
-    This makes the model robust to camera distance variations.
-    
-    :param landmarks: Array of shape (21, 3) or list of 63 values
-    :return: Normalized landmarks as array of shape (21, 3)
+    Normalize hand landmarks to be user- and distance-invariant.
+
+    Steps:
+    1. Use wrist (landmark 0) as origin
+    2. Scale by palm size (distance wrist ↔ middle MCP)
+    3. Return normalized (21, 3) landmarks
+
+    :param landmarks: np.ndarray of shape (21, 3)
+    :return: normalized np.ndarray of shape (21, 3)
     """
-    landmarks = np.array(landmarks).reshape((21, 3))
-    
-    # Check if any landmarks are detected (all zeros = no hand)
-    if np.sum(landmarks) == 0:
-        return landmarks
-    
-    # Use wrist (landmark 0) as origin
-    wrist = landmarks[0].copy()
-    landmarks = landmarks - wrist
-    
-    # Calculate hand size (max distance between any two landmarks)
-    # This is robust and helps scale invariance
-    max_distance = 0
-    for i in range(len(landmarks)):
-        for j in range(i + 1, len(landmarks)):
-            dist = np.linalg.norm(landmarks[i] - landmarks[j])
-            max_distance = max(max_distance, dist)
-    
-    # Avoid division by zero
-    if max_distance > 0:
-        landmarks = landmarks / max_distance
-    
+
+    # No hand detected
+    if landmarks is None or not np.any(landmarks):
+        return np.zeros((21, 3), dtype=np.float32)
+
+    landmarks = landmarks.copy()
+
+    # ---- Translation invariance ----
+    wrist = landmarks[0]
+    landmarks -= wrist
+
+    # ---- Scale invariance ----
+    # Palm size = distance wrist ↔ middle finger MCP (landmark 9)
+    palm_size = np.linalg.norm(landmarks[9]) + 1e-6
+    landmarks /= palm_size
+
     return landmarks
 
 
+# -------------------------------
+# Landmark extraction (MAIN API)
+# -------------------------------
+
 def extract_landmarks(results):
-    """Extract the results of both hands and convert them to a np array of size
-    if a hand doesn't appear, return an array of zeros
-    
-    Uses normalized landmarks for distance-invariant recognition.
-
-    :param results: mediapipe object that contains the 3D position of all keypoints
-    :return: Two np arrays of size (1, 21 * 3) = (1, nb_keypoints * nb_coordinates) corresponding to both hands
     """
-    pose = landmark_to_array(results.pose_landmarks).reshape(99).tolist()
+    Extract and normalize pose, left-hand, and right-hand landmarks.
 
-    left_hand = np.zeros(63).tolist()
-    if results.left_hand_landmarks:
-        # Normalize left hand landmarks for distance invariance
-        lh_landmarks = landmark_to_array(results.left_hand_landmarks)
-        lh_normalized = normalize_hand_landmarks(lh_landmarks)
-        left_hand = lh_normalized.reshape(63).tolist()
+    Returns:
+    - pose      : (99,)  flattened pose landmarks (or zeros)
+    - left_hand : (63,)  normalized left-hand landmarks
+    - right_hand: (63,)  normalized right-hand landmarks
+    """
 
-    right_hand = np.zeros(63).tolist()
-    if results.right_hand_landmarks:
-        # Normalize right hand landmarks for distance invariance
-        rh_landmarks = landmark_to_array(results.right_hand_landmarks)
-        rh_normalized = normalize_hand_landmarks(rh_landmarks)
-        right_hand = rh_normalized.reshape(63).tolist()
-    
-    return pose, left_hand, right_hand
+    # ---- Pose (kept for compatibility, not used heavily) ----
+    pose = np.zeros(99, dtype=np.float32)
 
+    # ---- Hands (MediaPipe Hands uses multi_hand_landmarks) ----
+    lh = np.zeros(63, dtype=np.float32)
+    rh = np.zeros(63, dtype=np.float32)
+
+    hands = getattr(results, "multi_hand_landmarks", None)
+    if hands:
+        left_hand = landmark_to_array(hands[0])
+        left_hand = normalize_hand_landmarks(left_hand).reshape(-1)
+        lh = left_hand
+
+        if len(hands) > 1:
+            right_hand = landmark_to_array(hands[1])
+            right_hand = normalize_hand_landmarks(right_hand).reshape(-1)
+            rh = right_hand
+
+    return pose.tolist(), lh.tolist(), rh.tolist()
+
+
+# ============================================================================
+# DATASET UTILITIES (OFFLINE USE)
+# ============================================================================
 
 def save_landmarks_from_video(video_name):
+    """
+    Extract and save landmarks from a video file.
+    Used only for dataset creation (NOT real-time).
+    """
+
     landmark_list = {"pose": [], "left_hand": [], "right_hand": []}
     sign_name = video_name.split("-")[0]
 
-    # Set the Video stream
     cap = cv2.VideoCapture(
         os.path.join("data", "videos", sign_name, video_name + ".mp4")
     )
-    with mp.solutions.holistic.Holistic(
-        min_detection_confidence=0.5, min_tracking_confidence=0.5
-    ) as holistic:
+
+    with mp_hands.Hands(
+        max_num_hands=2,
+        model_complexity=1,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5
+    ) as hands:
+
         while cap.isOpened():
             ret, frame = cap.read()
-            if ret:
-                # Make detections
-                image, results = mediapipe_detection(frame, holistic)
-
-                # Store results
-                pose, left_hand, right_hand = extract_landmarks(results)
-                landmark_list["pose"].append(pose)
-                landmark_list["left_hand"].append(left_hand)
-                landmark_list["right_hand"].append(right_hand)
-            else:
+            if not ret:
                 break
+
+            image, results = mediapipe_detection(frame, hands)
+            pose, left_hand, right_hand = extract_landmarks(results)
+
+            landmark_list["pose"].append(pose)
+            landmark_list["left_hand"].append(left_hand)
+            landmark_list["right_hand"].append(right_hand)
+
         cap.release()
 
-    # Create the folder of the sign if it doesn't exists
-    path = os.path.join("data", "dataset", sign_name)
-    if not os.path.exists(path):
-        os.mkdir(path)
+    # ---- Directory setup ----
+    base_path = os.path.join("data", "dataset", sign_name, video_name)
+    os.makedirs(base_path, exist_ok=True)
 
-    # Create the folder of the video data if it doesn't exists
-    data_path = os.path.join(path, video_name)
-    if not os.path.exists(data_path):
-        os.mkdir(data_path)
+    save_array(landmark_list["pose"], os.path.join(base_path, f"pose_{video_name}.pickle"))
+    save_array(landmark_list["left_hand"], os.path.join(base_path, f"lh_{video_name}.pickle"))
+    save_array(landmark_list["right_hand"], os.path.join(base_path, f"rh_{video_name}.pickle"))
 
-    # Saving the landmark_list in the correct folder
-    save_array(
-        landmark_list["pose"], os.path.join(data_path, f"pose_{video_name}.pickle")
-    )
-    save_array(
-        landmark_list["left_hand"], os.path.join(data_path, f"lh_{video_name}.pickle")
-    )
-    save_array(
-        landmark_list["right_hand"], os.path.join(data_path, f"rh_{video_name}.pickle")
-    )
 
+# -------------------------------
+# Pickle helpers
+# -------------------------------
 
 def save_array(arr, path):
-    file = open(path, "wb")
-    pkl.dump(arr, file)
-    file.close()
+    with open(path, "wb") as f:
+        pkl.dump(arr, f)
 
 
 def load_array(path):
-    file = open(path, "rb")
-    arr = pkl.load(file)
-    file.close()
-    return np.array(arr)
+    with open(path, "rb") as f:
+        return np.array(pkl.load(f))
