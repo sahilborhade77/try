@@ -225,10 +225,10 @@ def render_live(recognizer: Optional[DTWRecognizer], init_error: str) -> None:
     col_start, col_stop = st.columns(2)
     with col_start:
         if st.button("Start", use_container_width=True):
-            st.session_state.recognition_running = True
+            st.session_state.running = True
     with col_stop:
         if st.button("Stop", use_container_width=True):
-            st.session_state.recognition_running = False
+            st.session_state.running = False
 
     if init_error:
         st.warning(init_error)
@@ -248,13 +248,13 @@ def render_live(recognizer: Optional[DTWRecognizer], init_error: str) -> None:
         else 0
     )
 
-    if st.session_state.recognition_running:
+    if st.session_state.running:
         st.success("🟢 Recognition Active")
     else:
         st.error("🔴 Recognition Stopped")
     st.markdown("---")
 
-    if st.session_state.recognition_running:
+    if st.session_state.running:
         st.caption("Allow camera access in your browser.")
 
         ctx = webrtc_streamer(
@@ -377,8 +377,8 @@ def main() -> None:
     st.set_page_config(page_title="Sign Language Recognition System", layout="wide")
     apply_styles()
 
-    if "recognition_running" not in st.session_state:
-        st.session_state.recognition_running = False
+    if "running" not in st.session_state:
+        st.session_state.running = False
 
     st.markdown("<div class='main-title'>Sign Language Recognition System</div>", unsafe_allow_html=True)
     st.markdown(
