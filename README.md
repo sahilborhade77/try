@@ -27,13 +27,19 @@ python -m venv .venv
 source .venv/bin/activate   # macOS/Linux
 
 # Install dependencies
-pip install -r requirements_updated.txt
+pip install -r requirements.txt
 ```
 
 ### Run the Application
 
 ```bash
 python main.py
+```
+
+### Run the Streamlit Web App
+
+```bash
+streamlit run webapp_app.py
 ```
 
 ### Keyboard Controls
@@ -162,6 +168,22 @@ Planned features marked in code (see TODO comments):
 - Perform gestures clearly and consistently
 - Consider lowering the DTW threshold for stricter matching
 - Record multiple examples of each sign
+
+## Deploy to Streamlit Community Cloud
+
+1. Push this repository to GitHub with `webapp_app.py` and `requirements.txt`.
+2. Open [https://share.streamlit.io](https://share.streamlit.io) and sign in with GitHub.
+3. Click **New app** and select:
+   - Repository: your fork/repo
+   - Branch: `webapp` (or your deployment branch)
+   - Main file path: `webapp_app.py`
+4. Click **Deploy**.
+
+### Notes for Cloud Deployment
+
+- The app uses `streamlit-webrtc` for browser webcam access (no `cv2.VideoCapture`).
+- Keep sign samples in `data/signs` so DTW has reference gestures to match.
+- On first launch, allow camera permission in your browser.
 
 ## License
 
