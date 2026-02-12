@@ -1,5 +1,6 @@
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
+from typing import Optional
 
 WHITE_COLOR = (245, 242, 226)
 RED_COLOR = (25, 35, 240)
@@ -36,8 +37,8 @@ class WebcamManager(object):
         is_recording: bool,
         sequence_length: int = 0,
         current_mode: str = "recognize",
-        current_sign_name: str = "",
-        dtw_distance: float = None,
+        current_sign_name: Optional[str] = None,
+        dtw_distance: Optional[float] = None,
     ):
         pil_image = Image.fromarray(image)
 
@@ -45,7 +46,7 @@ class WebcamManager(object):
         aspect_ratio = w / h
         new_w = int(HEIGHT * aspect_ratio)
         pil_image = pil_image.resize((new_w, HEIGHT), Image.Resampling.LANCZOS)
-        pil_image = pil_image.transpose(Image.FLIP_LEFT_RIGHT)
+        pil_image = pil_image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
 
         draw = ImageDraw.Draw(pil_image)
 
@@ -78,6 +79,33 @@ class WebcamManager(object):
         draw.ellipse([new_w - 45, 15, new_w - 15, 45], fill=indicator_color)
 
         return np.array(pil_image)
+
+    def update(
+        self,
+        frame,
+        results,
+        sign_detected,
+        is_recording,
+        sequence_length=0,
+        current_mode="recognize",
+        current_sign_name: Optional[str] = None,
+        dtw_distance=None,
+    ):
+        # Draw landmarks on the image
+        display_image = self.draw_landmarks_on_image(frame, results)
+
+        # Add text overlay
+        display_image = self.add_text_overlay(
+            display_image,
+            sign_detected=sign_detected,
+            is_recording=is_recording,
+            sequence_length=sequence_length,
+            current_mode=current_mode,
+            current_sign_name=current_sign_name,
+            dtw_distance=dtw_distance,
+        )
+
+        return display_image
 
     def draw_text(
         self,

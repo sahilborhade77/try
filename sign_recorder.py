@@ -1,107 +1,97 @@
-import pandas as pd
 import numpy as np
-from collections import Counter
+import pandas as pd
 
-from utils.dtw import dtw_distances
 from models.sign_model import SignModel
 from utils.landmark_utils import extract_landmarks
-from utils.sign_storage import save_sign_sequence, load_all_sign_sequences
+from utils.sign_storage import load_all_sign_sequences, save_sign_sequence
 
 
 class SignRecorder(object):
-    def __init__(self, reference_signs: pd.DataFrame | None = None, seq_len=50, mode="recognize", dtw_threshold=2000):
+    def __init__(
+        self,
+        reference_signs: pd.DataFrame | None = None,
+        seq_len=50,
+        mode="recognize",
+        dtw_threshold=2000,
+    ):
         """
         Initialize SignRecorder.
-        
-        :param reference_signs: DataFrame with reference signs (for recognize mode)
+
+        :param reference_signs: DataFrame with reference signs (kept for compatibility)
         :param seq_len: Number of frames to record per gesture
         :param mode: "record" to create reference signs, "recognize" to match against saved signs
-        :param dtw_threshold: Maximum DTW distance to consider a valid match (default 2000)
+        :param dtw_threshold: Maximum DTW distance to consider a valid match
         """
-        # Variables for recording
         self.is_recording = False
         self.is_saving = False
         self.seq_len = seq_len
         self.mode = mode
         self.dtw_threshold = dtw_threshold
 
-        # List of results stored each frame
         self.recorded_results = []
-        
-        # For saving: store the sign name during recording
         self.current_sign_name = None
-        
-        # Store last DTW distance for display
         self.last_dtw_distance = None
-
-        # DataFrame storing the distances between the recorded sign & all the reference signs from the dataset
         self.reference_signs = reference_signs if reference_signs is not None else pd.DataFrame()
-        
-        # Load reference sign sequences from disk
+
+        self._refresh_sign_sequences()
+
+        print(f"SignRecorder initialized in '{mode}' mode")
+        print(f"DTW threshold set to {dtw_threshold}")
+        print(f"Loaded {self.num_loaded_signs} reference signs")
+
+    def _refresh_sign_sequences(self):
         self.sign_sequences = load_all_sign_sequences()
         self.num_loaded_signs = len(self.sign_sequences)
-        
-        print(f"✓ SignRecorder initialized in '{mode}' mode")
-        print(f"✓ DTW threshold set to {dtw_threshold}")
-        print(f"✓ Loaded {self.num_loaded_signs} reference signs")
 
     def record(self, sign_name=None):
-        """
-        Start recording a new gesture sequence.
-        
-        :param sign_name: Name of the sign to record (required for recording mode)
-        """
+        """Start recording in current mode."""
+        self.recorded_results = []
+
         if self.mode == "record":
             if sign_name is None:
                 raise ValueError("sign_name is required in record mode")
+            self.is_recording = False
             self.current_sign_name = sign_name
             self.is_saving = True
-            print(f"\n📹 Recording '{sign_name}'... Press 'r' again to finish")
-        else:
-            # In recognize mode, start recording for recognition
-            self.is_recording = True
-            print(f"\n📹 Recording gesture for recognition... ({0}/{self.seq_len} frames)")
+            print(f"Recording '{sign_name}'... Press 'r' again to finish")
+            return
+
+        self.is_saving = False
+        self.current_sign_name = None
+        self.is_recording = True
+        print(f"Recording gesture for recognition... (0/{self.seq_len} frames)")
 
     def process_results(self, results) -> (str, bool):
         """
         Process mediapipe results and manage recording/recognition.
-        
-        :param results: mediapipe output
-        :return: Tuple of (predicted_text, is_recording, recording_mode)
+
+        :return: Tuple of (predicted_text_or_status, is_active_recording)
         """
-        # Handle recording mode (saving reference signs)
         if self.is_saving:
             if len(self.recorded_results) < self.seq_len:
                 self.recorded_results.append(results)
             else:
                 self._save_sign()
-                return f"Saved: {self.current_sign_name}", self.is_saving
+                return "Saved sign", self.is_recording or self.is_saving
 
-        # Handle recognize mode (matching against reference signs)
         if self.is_recording:
             if len(self.recorded_results) < self.seq_len:
                 self.recorded_results.append(results)
             else:
                 predicted_text = self._compute_distances_and_predict()
-                return predicted_text, self.is_recording
+                return predicted_text, self.is_recording or self.is_saving
 
-        return "", self.is_recording
+        return "", self.is_recording or self.is_saving
+
     def save_reference_sign(self, sign_name):
-        """
-        Save the currently recorded frames as a reference sign.
-        Called from Streamlit app after recording is complete.
-        """
+        """Save recorded frames as a reference sign (Streamlit compatibility)."""
         if not self.recorded_results:
             print("No frames to save")
             return
-    
+
         self.current_sign_name = sign_name
         self.is_saving = True
         self._save_sign()
-    
-        # Reload stored signs so recognition can use the new sign
-        self.sign_sequences = load_all_sign_sequences()
-        self.num_loaded_signs = len(self.sign_sequences)
 
     def _save_sign(self):
         """Save the recorded gesture sequence to disk."""
@@ -115,30 +105,28 @@ class SignRecorder(object):
             left_hand_list.append(left_hand)
             right_hand_list.append(right_hand)
 
-        # Save to disk
-        save_sign_sequence(self.current_sign_name, left_hand_list, right_hand_list)
+        sign_name = self.current_sign_name
+        save_sign_sequence(sign_name, left_hand_list, right_hand_list)
+        self._refresh_sign_sequences()
 
-        # Reset recording state
         self.recorded_results = []
         self.is_saving = False
         self.current_sign_name = None
 
+        print(f"Saved sign: {sign_name}")
+
     def _compute_distances_and_predict(self) -> str:
         """
-        Compute DTW distances and predict the sign.
-        Apply DTW threshold to filter out poor matches.
-        
+        Compute DTW distances and predict the best sign.
+
         :return: Predicted sign name or "Unknown Sign"
         """
-        # Check if we have reference signs
         if self.num_loaded_signs == 0:
-            print("⚠ No reference signs found. Record some signs first using 'record' mode.")
+            print("No reference signs found. Record some signs first using record mode.")
             self.recorded_results = []
             self.is_recording = False
             self.last_dtw_distance = None
             return "No reference signs"
-
-        print(f"\n=== Processing sequence of {len(self.recorded_results)} frames ===")
 
         left_hand_list, right_hand_list = [], []
         for results in self.recorded_results:
@@ -146,78 +134,84 @@ class SignRecorder(object):
             left_hand_list.append(left_hand)
             right_hand_list.append(right_hand)
 
-        # Create a SignModel object with the landmarks gathered during recording
         recorded_sign = SignModel(left_hand_list, right_hand_list)
 
-        # Compute DTW distances against all reference signs
         distances = {}
         for sign_name, sequences in self.sign_sequences.items():
-            min_distance = float('inf')
+            min_distance = float("inf")
             for ref_left, ref_right in sequences:
-                # ref_left and ref_right are full sequences (arrays of shape (seq_len, 63))
-                # Convert them to list format for SignModel
                 ref_sign = SignModel(ref_left.tolist(), ref_right.tolist())
-                # Compute DTW distance
                 dist = self._compute_dtw_distance(recorded_sign, ref_sign)
                 min_distance = min(min_distance, dist)
             distances[sign_name] = min_distance
 
-        # Find the best match
         if distances:
             best_sign = min(distances, key=distances.get)
             best_distance = distances[best_sign]
-            
-            print(f"DTW Distances: {distances}")
-            print(f"Best match: '{best_sign}' (distance: {best_distance:.2f})")
-            
-            # Store distance for display
             self.last_dtw_distance = best_distance
-            
-            # Check if distance is below threshold
+
+            print(f"DTW distances: {distances}")
+            print(f"Best match: '{best_sign}' (distance: {best_distance:.2f})")
+
             if best_distance > self.dtw_threshold:
-                print(f"⚠ Distance {best_distance:.2f} exceeds threshold {self.dtw_threshold}")
-                print("→ Classified as 'Unknown Sign'")
+                print(
+                    f"Distance {best_distance:.2f} exceeds threshold {self.dtw_threshold}; classifying as Unknown Sign"
+                )
                 best_sign = "Unknown Sign"
         else:
             best_sign = "Unknown Sign"
             self.last_dtw_distance = None
 
-        # Reset recording state
         self.recorded_results = []
         self.is_recording = False
 
         return best_sign
 
     def _compute_dtw_distance(self, sign1: SignModel, sign2: SignModel) -> float:
-        """
-        Compute DTW distance between two sign models using FastDTW.
-        """
+        """Compute DTW distance between two sign models."""
         from fastdtw import fastdtw
-        
-        # Get embeddings
-        emb1_left = sign1.lh_embedding if sign1.has_left_hand else []
-        emb1_right = sign1.rh_embedding if sign1.has_right_hand else []
-        emb2_left = sign2.lh_embedding if sign2.has_left_hand else []
-        emb2_right = sign2.rh_embedding if sign2.has_right_hand else []
-        
-        total_distance = 0
-        
-        # Compute DTW for left hand if both have it
-        if sign1.has_left_hand and sign2.has_left_hand and len(emb1_left) > 0 and len(emb2_left) > 0:
-            dist, _ = fastdtw(emb1_left, emb2_left)
-            total_distance += dist
-        
-        # Compute DTW for right hand if both have it
-        if sign1.has_right_hand and sign2.has_right_hand and len(emb1_right) > 0 and len(emb2_right) > 0:
-            dist, _ = fastdtw(emb1_right, emb2_right)
-            total_distance += dist
-        
-        return total_distance if total_distance > 0 else float('inf')
+
+        seq1_left = sign1.left_hand_list if sign1.has_left_hand else []
+        seq1_right = sign1.right_hand_list if sign1.has_right_hand else []
+        seq2_left = sign2.left_hand_list if sign2.has_left_hand else []
+        seq2_right = sign2.right_hand_list if sign2.has_right_hand else []
+
+        total_distance = 0.0
+
+        def vec_l2(a, b):
+            return float(np.linalg.norm(np.array(a) - np.array(b)))
+
+        if sign1.has_left_hand and sign2.has_left_hand and len(seq1_left) > 0 and len(seq2_left) > 0:
+            dist, _ = fastdtw(seq1_left, seq2_left, dist=vec_l2)
+            total_distance += float(dist)
+
+        if sign1.has_right_hand and sign2.has_right_hand and len(seq1_right) > 0 and len(seq2_right) > 0:
+            dist, _ = fastdtw(seq1_right, seq2_right, dist=vec_l2)
+            total_distance += float(dist)
+
+        return total_distance if total_distance > 0 else float("inf")
 
     def stop_recording(self):
-        """Stop recording without saving."""
-        self.is_recording = False
-        self.is_saving = False
-        self.recorded_results = []
-        print("Stopped recording")
+        """
+        Stop active recording.
 
+        - In record mode: save if frames were captured and sign name is set.
+        - In recognize mode: predict if frames were captured.
+
+        :return: Status or prediction string when available.
+        """
+        if self.is_saving:
+            if self.current_sign_name and self.recorded_results:
+                self._save_sign()
+                return "Saved sign"
+            self.is_saving = False
+            self.recorded_results = []
+            return None
+
+        if self.is_recording:
+            if self.recorded_results:
+                return self._compute_distances_and_predict()
+            self.is_recording = False
+            self.recorded_results = []
+
+        return None

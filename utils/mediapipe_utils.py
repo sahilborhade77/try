@@ -1,16 +1,17 @@
-class MockResults:
-    """Mock MediaPipe results for Streamlit Cloud compatibility."""
-    def __init__(self):
-        self.hand_landmarks = []
-        self.handedness = []
+import cv2
 
-def mediapipe_detection(image):
-    """
-    Make hand landmarker prediction on image using MediaPipe Tasks API.
-    Returns safe stub to avoid cv2/mediapipe imports.
 
-    :param image: Input image (numpy array, RGB)
-    :return: Processed image and results
+def mediapipe_detection(image, holistic):
     """
-    # Return original image and empty results to avoid mediapipe imports
-    return image, MockResults()
+    Run MediaPipe Holistic on a cv2 frame.
+
+    :param image: Input image from cv2 (BGR)
+    :param holistic: MediaPipe holistic model
+    :return: Tuple[processed_bgr_image, holistic_results]
+    """
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    rgb.flags.writeable = False
+    results = holistic.process(rgb)
+    rgb.flags.writeable = True
+    bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    return bgr, results
