@@ -63,7 +63,7 @@ def main():
     print("  'q' = Quit")
     print("=" * 60)
 
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    cap = cv2.VideoCapture(0)
 
     if not cap.isOpened():
         print("ERROR: Cannot open webcam!")
@@ -72,19 +72,22 @@ def main():
     print("\nWebcam opened")
     print(f"Starting in '{mode.upper()}' mode\n")
 
-    with mp.solutions.holistic.Holistic(  # type: ignore
-        min_detection_confidence=0.5, min_tracking_confidence=0.5
-    ) as holistic:
+    with mp.solutions.hands.Hands(
+        static_image_mode=False,
+        max_num_hands=2,
+        min_detection_confidence=0.6,
+        min_tracking_confidence=0.6,
+    ) as hands:
 
         try:
             while cap.isOpened():
                 ret, frame = cap.read()
 
-                if not ret:
-                    print("Failed to read frame from webcam")
+                if not ret or frame is None:
+                    print("Failed to read frame from webcam (ret=False or empty frame)")
                     break
 
-                image, results = mediapipe_detection(frame, holistic)
+                image, results = mediapipe_detection(frame, hands)
 
                 sign_detected, is_recording = sign_recorder.process_results(results)
                 sequence_length = len(sign_recorder.recorded_results)

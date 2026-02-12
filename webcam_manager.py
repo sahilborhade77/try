@@ -1,4 +1,5 @@
 from PIL import Image, ImageDraw, ImageFont
+import mediapipe as mp
 import numpy as np
 from typing import Optional
 
@@ -22,12 +23,32 @@ class WebcamManager(object):
     """Adds text overlays using PIL (Unicode-safe, Streamlit Cloud safe)."""
 
     def __init__(self):
+        self.mp_drawing = mp.solutions.drawing_utils
+        self.mp_hands = mp.solutions.hands
+
         try:
             self.font = ImageFont.truetype("arial.ttf", 20)
         except Exception:
             self.font = ImageFont.load_default()
 
     def draw_landmarks_on_image(self, image: np.ndarray, results):
+        if results is None:
+            return image
+
+        if getattr(results, "left_hand_landmarks", None):
+            self.mp_drawing.draw_landmarks(
+                image,
+                results.left_hand_landmarks,
+                self.mp_hands.HAND_CONNECTIONS,
+            )
+
+        if getattr(results, "right_hand_landmarks", None):
+            self.mp_drawing.draw_landmarks(
+                image,
+                results.right_hand_landmarks,
+                self.mp_hands.HAND_CONNECTIONS,
+            )
+
         return image
 
     def add_text_overlay(
