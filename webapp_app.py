@@ -34,6 +34,7 @@ class LiveResultStore:
     last_error: Optional[str] = None
     frames_seen: int = 0
     hands_detected: bool = False
+    sequence_buffer_len: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -111,6 +112,7 @@ class SignFrameProcessor(VideoProcessorBase):
                         self.result_store.last_error = str(exc)
             else:
                 self.result_store.status = "Waiting for hand landmarks"
+            self.result_store.sequence_buffer_len = len(self.left_buffer)
 
         return av.VideoFrame.from_ndarray(image, format="bgr24")
 
@@ -129,7 +131,11 @@ def initialize_recognizer() -> Tuple[Optional[DTWRecognizer], str]:
 
         reference_signs = pd.DataFrame(rows)
         if reference_signs.empty:
-            return None, "No saved sign sequences found in data/signs. Record samples first."
+            return (
+                None,
+                "⚠ No trained gesture data found.\n"
+                "Please upload or record sign samples before starting live recognition.",
+            )
 
         recognizer = DTWRecognizer(reference_signs=reference_signs)
         return recognizer, ""
@@ -141,25 +147,38 @@ def apply_styles() -> None:
     st.markdown(
         """
         <style>
+            .stApp {
+                background: linear-gradient(180deg, #0e1117 0%, #141a24 100%);
+                color: #e5e7eb;
+            }
             .main-title {
                 font-size: 2.4rem;
                 font-weight: 700;
                 margin-bottom: 0;
-                color: #14213d;
+                color: #f3f4f6;
                 text-align: center;
             }
             .subtitle {
                 text-align: center;
-                color: #4a5568;
+                color: #9ca3af;
                 margin-top: 0.2rem;
                 margin-bottom: 1.2rem;
             }
-            .panel {
-                background: linear-gradient(120deg, #f8fbff 0%, #edf5ff 100%);
-                border: 1px solid #d9e8ff;
-                border-radius: 14px;
-                padding: 1rem 1.2rem;
-                margin-bottom: 1rem;
+            .card {
+                background: #111827;
+                border: 1px solid #253043;
+                border-radius: 12px;
+                padding: 1rem 1.1rem;
+                min-height: 180px;
+            }
+            .card h4 {
+                margin: 0 0 0.6rem 0;
+                color: #f9fafb;
+            }
+            .card p {
+                margin: 0.25rem 0;
+                color: #d1d5db;
+                line-height: 1.45;
             }
         </style>
         """,
@@ -168,15 +187,36 @@ def apply_styles() -> None:
 
 
 def render_home() -> None:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.subheader("Home")
-    st.write(
-        "This web app performs real-time sign gesture recognition from webcam video. "
-        "It uses MediaPipe to extract hand landmarks and DTW to match live sequences "
-        "against your stored sign templates."
-    )
-    st.write("Use Live Recognition to start webcam-based prediction in your browser.")
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        with st.container():
+            st.markdown(
+                """
+                <div class="card">
+                    <h4>How It Works</h4>
+                    <p>Frames from browser webcam are processed live using MediaPipe hand landmarks.</p>
+                    <p>Landmark sequences are compared with stored templates using DTW for prediction.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    with col2:
+        with st.container():
+            st.markdown(
+                """
+                <div class="card">
+                    <h4>Using The App</h4>
+                    <p>Go to <b>Live Recognition</b> and click <b>Start</b>.</p>
+                    <p>Allow browser camera access and perform a trained sign clearly in view.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("---")
 
 
 def render_live(recognizer: Optional[DTWRecognizer], init_error: str) -> None:
@@ -202,9 +242,20 @@ def render_live(recognizer: Optional[DTWRecognizer], init_error: str) -> None:
         st.session_state.result_store = LiveResultStore()
 
     result_store: LiveResultStore = st.session_state.result_store
+    saved_signs_count = (
+        int(recognizer.reference_signs["name"].nunique())
+        if recognizer is not None and not recognizer.reference_signs.empty
+        else 0
+    )
 
     if st.session_state.recognition_running:
-        st.success("Recognition is running. Allow camera access in your browser.")
+        st.success("🟢 Recognition Active")
+    else:
+        st.error("🔴 Recognition Stopped")
+    st.markdown("---")
+
+    if st.session_state.recognition_running:
+        st.caption("Allow camera access in your browser.")
 
         ctx = webrtc_streamer(
             key="sign-language-recognition",
@@ -224,31 +275,102 @@ def render_live(recognizer: Optional[DTWRecognizer], init_error: str) -> None:
             status = result_store.status
             error = result_store.last_error
             hands_detected = result_store.hands_detected
+            buffer_len = result_store.sequence_buffer_len
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Prediction", label)
-        c2.metric("Score", "-" if score is None else f"{score:.2f}")
-        c3.metric("Status", status)
+        c1.metric("Saved Signs", saved_signs_count)
+        c2.metric("Sequence Buffer", buffer_len)
+        c3.metric("Current DTW Score", "-" if score is None else f"{score:.2f}")
+        st.markdown("---")
+
+        st.markdown(
+            """
+            <div style="
+                text-align:center;
+                background:#111827;
+                border:1px solid #253043;
+                border-radius:12px;
+                padding:18px 12px;
+                margin:8px 0 14px 0;
+            ">
+                <div style="font-size:0.95rem;color:#9ca3af;margin-bottom:8px;">Detected Sign</div>
+                <div style="font-size:2.2rem;font-weight:800;color:#f9fafb;line-height:1.2;">"""
+            + f"""{label}"""
+            + """</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         if hands_detected:
             st.success("Hand landmarks detected.")
         else:
             st.info("Show your hand clearly to the camera.")
 
+        st.caption(f"Live Status: {status}")
         if error:
             st.warning(error)
     else:
-        st.info("Recognition is stopped.")
+        with result_store.lock:
+            stopped_score = result_store.score
+            stopped_buffer = result_store.sequence_buffer_len
+            stopped_label = result_store.label
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Saved Signs", saved_signs_count)
+        c2.metric("Sequence Buffer", stopped_buffer)
+        c3.metric("Current DTW Score", "-" if stopped_score is None else f"{stopped_score:.2f}")
+        st.markdown("---")
+
+        st.markdown(
+            """
+            <div style="
+                text-align:center;
+                background:#111827;
+                border:1px solid #253043;
+                border-radius:12px;
+                padding:18px 12px;
+                margin:8px 0 14px 0;
+            ">
+                <div style="font-size:0.95rem;color:#9ca3af;margin-bottom:8px;">Detected Sign</div>
+                <div style="font-size:2.2rem;font-weight:800;color:#f9fafb;line-height:1.2;">"""
+            + f"""{stopped_label}"""
+            + """</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_about() -> None:
-    st.markdown("<div class='panel'>", unsafe_allow_html=True)
     st.subheader("About")
-    st.write(
-        "Sign Language Recognition System is a DTW-based real-time gesture recognizer. "
-        "It reuses your existing desktop project logic and wraps it in a browser-based Streamlit interface."
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        with st.container():
+            st.markdown(
+                """
+                <div class="card">
+                    <h4>Project Summary</h4>
+                    <p>Sign Language Recognition System is a real-time browser-based gesture recognition app.</p>
+                    <p>It wraps your existing DTW + MediaPipe pipeline for web deployment.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    with c2:
+        with st.container():
+            st.markdown(
+                """
+                <div class="card">
+                    <h4>Core Stack</h4>
+                    <p>Streamlit + streamlit-webrtc for live browser webcam streaming.</p>
+                    <p>MediaPipe for landmarks and DTW matching with your saved sign templates.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    st.markdown("---")
 
 
 def main() -> None:
@@ -270,7 +392,7 @@ def main() -> None:
         horizontal=True,
         label_visibility="visible",
     )
-    st.divider()
+    st.markdown("---")
 
     with st.spinner("Loading sign references..."):
         recognizer, init_error = initialize_recognizer()
