@@ -184,6 +184,7 @@ Planned features marked in code (see TODO comments):
 - The app uses `streamlit-webrtc` for browser webcam access (no `cv2.VideoCapture`).
 - Keep sign samples in `data/signs` so DTW has reference gestures to match.
 - On first launch, allow camera permission in your browser.
+- Keep `packages.txt` in the repo root so Streamlit Cloud installs OpenCV system libraries.
 
 ## License
 
