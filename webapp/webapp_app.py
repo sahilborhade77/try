@@ -2,6 +2,9 @@ import threading
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+import zipfile
+import os
+
 import av
 import mediapipe as mp
 import numpy as np
@@ -16,6 +19,14 @@ from utils.mediapipe_utils import draw_landmarks, mediapipe_detection
 from utils.sign_storage import load_all_sign_sequences
 
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(BASE_DIR, "data", "dataset")
+ZIP_PATH = os.path.join(DATA_PATH, "signs.zip")
+
+if os.path.exists(ZIP_PATH):
+    with zipfile.ZipFile(ZIP_PATH, 'r') as zip_ref:
+        zip_ref.extractall(DATA_PATH)
+        
 RTC_CONFIG = RTCConfiguration(
     {
         "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}],
